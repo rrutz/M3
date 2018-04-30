@@ -1,75 +1,88 @@
 #!/bin/bash
 function inputValidation
 {  
-	if [[ $# -ne 2 ]] || [ $1 == "" ] || [ $2 == "" ] 
+	if [[ $# -ne 2 ]]
 	then
-		echo error message and usage
+		echo usage: $0 META PROJECT >&2
 		exit 1
 	else
 		META=$1
 		PROJECT=$2
+		RELEASE=UAT
 		MPRdev="/efs/dev/"
+		MPRdist="/efs/dist/"
+		RELEASENAME=`readlink "$MPRdev""$META"/"$PROJECT"/"$RELEASE"`
 	fi
 	
-	if [ ! -f "$MPRdev"efs ]
+	if [[ ! -f "$MPRdev"efscmds ]]
 	then
-		echo error: efs command does not exists
-		exit 1
-	fi  
-
-	if [ ! -f "$MPRdev"efsusage ]
-	then
-		echo error: efsusage command does not exists
+		echo error: "$MPRdev"efscmds does not exist >&2
 		exit 1
 	fi  	
-}
 
-function getCurrentRelease
-{
-	LARGEST_NUM=0
-	for FILE in `ls "$MPRdev""$META"/"$PROJECT" | grep "$USER"` 
-	do
-		NUM=`echo $FILE  | awk -F"_" '{print $NF}'`
- 	
-		if [[ $NUM -gt largestNum  ]]
-		then	
-			LARGEST_NUM=$NUM
-        	fi
-	done
-	
-	
-	if [[ "$LARGEST_NUM" =~ [0-9]+$ ]] && [[ "$LARGEST_NUM" != 0 ]]
+	if [[ ! -f "$MPRdev"efs ]]
 	then
-		RELEASE=""$USER"_"$LARGEST_NUM""
-	else
-		echo Release does not exists
+		echo error: "$MPRdev"efs does not exist >&2
+		exit 1
+	fi  	
+
+	if [[ `which efs` != "/efs/dev/efs" ]] 
+	then
+		echo error: Path to efs command is not "/efs/dev/efs" >&2
+		exit 1
+	fi
+
+	if [[ `which efscmds` != "/efs/dev/efscmds" ]]
+	then
+		echo error: Path to efscmds command is not "/efs/dev/efscmds" >&2
+		exit 1
+	fi	
+	
+	readlink "$MPRdev""$META"/"$PROJECT"/"$RELEASE" > /dev/null
+	if [[ $? != 0 ]]
+	then 
+		echo error: UAT link does not exist for "$MPRdev""$META"/"$PROJECT" >&2
+		exit 1
+	fi
+
+	if [[ "$RELEASENAME" == `readlink "$MPRdist""$META"/"$PROJECT"/PROD` ]]
+	then
+		echo PROD already linked to the most recent UAT release
 		exit 1
 	fi
 }
 
-
-function creteReleseeLink
+function printSuccess
 {
-	echo Creating Release Link for $RELEASE
-	efs create releaselink $META $PROJECT $RELEASE PROD
-	if [[ `readlink "$MPRdev""$META"/"$PROJECT"/PROD` != "$RELEASE" ]]
+	echo Command successfuly completed
+	echo '############################################################'
+}
+
+function createReleaseLink
+{
+	echo Running command: create releaselink "$META" "$PROJECT" "$RELEASENAME" PROD
+	efs create releaselink "$META" "$PROJECT" "$RELEASENAME" PROD > /dev/null
+	if [[ `readlink "$MPRdev""$META"/"$PROJECT"/PROD` != "$RELEASENAME" ]]
 	then
-		echo Unable to create link
+		echo error: Unable to create PROD link >&2
 		exit 1
 	fi
+	printSuccess
 }
 
 function DistIt
 {
-	# error check
-	efs dist releaselink $META $PROJECT PROD
+	echo Running command: efs dist releaselink $META $PROJECT PROD 
+	# error checking for copying????
+	efs dist releaselink $META $PROJECT PROD  > /dev/null
+	printSuccess
 }
 
 function main
 {
+	echo '############################################################'
 	inputValidation $@
-	getCurrentRelease
-	creteReleseeLink
+	createReleaseLink
 	DistIt	
 	exit 0
 }

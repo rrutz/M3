@@ -1,8 +1,9 @@
+#!/bin/bash
 function inputValidation
 {  
-	if [[ $# -ne 2 ]] || [ $1 == "" ] || [ $2 == "" ] 
+	if [[ $# -ne 2 ]]
 	then
-		echo error message and usage
+		echo usage: $0 META PROJECT >&2
 		exit 1
 	else
 		META=$1
@@ -10,45 +11,62 @@ function inputValidation
 		MPRdev="/efs/dev/"
 	fi
 	
-	if [ ! -f "$MPRdev"efs ]
+	if [[ ! -f "$MPRdev"efscmds ]]
 	then
-		echo error: efs command does not exists
-		exit 1
-	fi  
-
-	if [ ! -f "$MPRdev"efsusage ]
-	then
-		echo error: efsusage command does not exists
+		echo error: "$MPRdev"efscmds does not exist >&2
 		exit 1
 	fi  	
+
+	if [[ ! -f "$MPRdev"efs ]]
+	then
+		echo error: "$MPRdev"efs does not exist >&2
+		exit 1
+	fi  	
+
+	if [[ `which efs` != "/efs/dev/efs" ]] 
+	then
+		echo error: Path to efs command is not "/efs/dev/efs" >&2
+		exit 1
+	fi
+
+	if [[ `which efscmds` != "/efs/dev/efscmds" ]]
+	then
+		echo error: Path to efscmds command is not "/efs/dev/efscmds" >&2
+		exit 1
+	fi
+}
+
+function printSuccess
+{
+	echo Command successfuly completed
+	echo '############################################################'
 }
 
 function createDIR
 {
         local EPS_COMMAND=$1
         local DIR=$2	
-        if [ ! -d "$DIR" ]
+        if [[ ! -d "$DIR" ]]
         then
-		echo '###### Running command: '$EPS_COMMAND
+		echo Running command: $EPS_COMMAND
                 $EPS_COMMAND 
-                if [ ! -d "$DIR" ]
+                if [[ ! -d "$DIR" ]]
                 then
-                        echo error: unable to make folder 
+                        echo error: unable to make "$DIR" >&2
                         exit 1
                 fi     
-		echo '###################################################'
+		printSuccess
         fi
 }
-
 
 function nextReleaseName
 {
 	LARGEST_NUM=0
 	for FILE in `ls "$MPRdev""$META"/"$PROJECT" | grep "$USER"` 
 	do
-		NUM=`echo $FILE  | awk -F"_" '{print $NF}'`
+		NUM=`echo $FILE | awk -F"_" '{print $NF}'`
  	
-		if [[ $NUM -gt largestNum  ]]
+		if [[ $NUM -gt largestNum ]]
 		then	
 			LARGEST_NUM=$NUM
         	fi
@@ -64,93 +82,94 @@ function nextReleaseName
 
 function createRelease
 {
-	echo '###### Running command: ' efs create release $META $PROJECT $RELEASE
+	echo Running command: efs create release $META $PROJECT $RELEASE
         nextReleaseName
-        MPRrel="$MPRdev"$META/$PROJECT/$RELEASE
-        if [ ! -d "$MPRrel" ]
+        MPRrel="$MPRdev""$META"/"$PROJECT"/"$RELEASE"
+        if [[ ! -d "$MPRrel" ]]
         then
-                efs create release $META $PROJECT $RELEASE > /dev/null
+                efs create release "$META" "$PROJECT" "$RELEASE" > /dev/null
                 for FOLDER in "$MPRrel" "$MPRrel/src" "$MPRrel/install"
                 do
-                        if [ ! -d "$FOLDER" ]  
+                        if [[ ! -d "$FOLDER" ]]  
                         then
-                                echo error: unable to make "$FOLDER"
-				echo '###################################################'
+                                echo error: unable to make "$FOLDER" >&2
                                 exit 1
                         fi
                 done
         else
-                echo $MPRrel already exists
-		echo '###################################################'
+                echo error "$MPRrel" already exists >&2
                 exit 1
         fi
-	echo '###################################################'
+	printSuccess
 }
 
 function clone 
 {	
-	echo Cloning to "$MPRrel"/src
 	git clone https://MthreeDelegate:AlumniTrain%40M3%2FT1@bitbucket.org/mthree_consulting/javademos.git ""$MPRrel"/src"
 	if [[ $? != 0 ]] 
 	then
-		echo Unable to clone
+		echo error: Unable to clone to "$MPRrel"/src >&2
 		exit 1
 	fi	
+	printSuccess
 }
 
 function createCommon
 {
-	echo '###### Running command: ' efs create install $META $PROJECT $RELEASE common
-        
-        COMMON="$MPRdev"$META/$PROJECT/$RELEASE/install/common
-        if [ ! -d "$COMMON" ]
+	echo Running command: efs create install $META $PROJECT $RELEASE common 
+    
+        COMMON="$MPRdev""$META"/"$PROJECT"/"$RELEASE"/install/common
+        if [[ ! -d "$COMMON" ]]
         then
-                efs create install $META $PROJECT $RELEASE common
-                if [ ! -d "$COMMON" ]
+                efs create install "$META" "$PROJECT" "$RELEASE" common > /dev/null
+                if [[ ! -d "$COMMON" ]]
                 then
-                	echo error: unable to make "$COMMON"
-                        echo '###################################################'
+                	echo error: unable to make "$COMMON" >&2
                         exit 1
                 fi
         else
-                echo $COMMON already exists
-                echo '###################################################'
+                echo error: "$COMMON" already exists >&2
                 exit 1
         fi
+	printSuccess
 }
 
-function copy
+function copyToCommon
 {
-	cp -R "$MPRdev"$META/$PROJECT/$RELEASE/src "$MPRdev"$META/$PROJECT/$RELEASE/install/common
+	echo Copying src context to common
+	cp -R "$MPRdev""$META"/"$PROJECT"/"$RELEASE"/src "$MPRdev""$META"/"$PROJECT"/"$RELEASE"/install/common
 	if [[ $? != 0 ]]
 	then
-		echo Unable to copy
+		echo error: Unable to copy from src to common >&2
 		exit 1
 	fi
+	printSuccess
 }
 
-function createReleaseLink
+function createDevReleaseLink
 {
-	echo Creating Release Link for $RELEASE
-	efs create releaselink $META $PROJECT $RELEASE DEV
-	if [[ $? != 0 ]]
+	echo Running command: efs create releaselink "$META" "$PROJECT" "$RELEASE" DEV
+	efs create releaselink "$META" "$PROJECT" "$RELEASE" DEV > /dev/null
+	if [[ `readlink "$MPRdev""$META"/"$PROJECT"/DEV` != "$RELEASE" ]]
 	then
-		echo Unable to create link
+		echo error: Unable to create DEV link >&2
 		exit 1
 	fi
+	printSuccess
 }
 
 
 function main
 {
+	echo '############################################################'
 	inputValidation $@
 	createDIR "efs create meta $META" ""$MPRdev""$META""
 	createDIR "efs create project $META $PROJECT" ""$MPRdev"$META"/"$PROJECT"
 	createRelease
 	clone
 	createCommon
-	copy
-	createReleaseLink
+	copyToCommon
+	createDevReleaseLink
 	
 	exit 0
 }
